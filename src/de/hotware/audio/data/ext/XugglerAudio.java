@@ -1,5 +1,6 @@
 package de.hotware.audio.data.ext;
 
+import java.io.IOException;
 import java.io.InputStream;
 
 import javax.sound.sampled.AudioFormat;
@@ -22,6 +23,7 @@ public class XugglerAudio extends BaseAudio {
 	protected IStreamCoder mAudioCoder;
 	protected int mAudioStreamId;
 	private AudioFormat mAudioFormat;
+	protected int mTotalBytesRead;
 
 	public XugglerAudio(InputStream pInputStream) {
 		this(pInputStream, AudioSystem.NOT_SPECIFIED);
@@ -31,6 +33,7 @@ public class XugglerAudio extends BaseAudio {
 		super();
 		this.mInputStream = pInputStream;
 		this.mPacket = IPacket.make();
+		this.mAudioStreamId = -1;
 	}
 
 	@Override
@@ -41,20 +44,17 @@ public class XugglerAudio extends BaseAudio {
 	@Override
 	public int read(byte[] pData, int pStart, int pLength) throws AudioException {
 		IPacket packet = this.mPacket;
-		int audioStreamId = this.mAudioStreamId;
 		if(packet.getSize() > pLength) {
 			throw new AudioException("packet size is greater than pLength");
 		}
-		while(this.mContainer.readNextPacket(packet) >= 0) {
-			/*
-			 * Now we have a packet, let's see if it belongs to our audio stream
-			 */
-			if(this.mPacket.getStreamIndex() == audioStreamId) {
+		
+		while(this.mContainer.readNextPacket(this.mPacket) >= 0) {
+			if(this.mPacket.getStreamIndex() == this.mAudioStreamId) {
 				IAudioSamples samples = IAudioSamples.make(pLength,
 						this.mAudioCoder.getChannels());
 				/*
 				 * Keep going until we've processed all data
-				 */
+				 */				
 				while(true) {
 					int bytesDecoded = this.mAudioCoder.decodeAudio(samples,
 							packet,
@@ -62,6 +62,7 @@ public class XugglerAudio extends BaseAudio {
 					if(bytesDecoded < 0) {
 						throw new AudioException("couldn't decode correctly");
 					}
+					this.mTotalBytesRead += bytesDecoded;
 					/*
 					 * Some decoder will consume data in a packet, but will not
 					 * be able to construct a full set of samples yet. Therefore
@@ -77,16 +78,8 @@ public class XugglerAudio extends BaseAudio {
 						return tmp.length;
 					}
 				}
-			} else {
-				/*
-				 * This packet isn't part of our audio stream, so we just
-				 * silently drop it.
-				 */
-				do {
-				} while(false);
 			}
-
-		}
+		}	
 		return -1;
 	}
 
@@ -101,9 +94,7 @@ public class XugglerAudio extends BaseAudio {
 
 		// query how many streams the call to open found
 		int numStreams = this.mContainer.getNumStreams();
-
-		// and iterate through the streams to find the first audio stream
-		this.mAudioStreamId = -1;
+		
 		IStreamCoder audioCoder = null;
 		for(int i = 0; i < numStreams; i++) {
 			// Find the stream object
@@ -143,13 +134,17 @@ public class XugglerAudio extends BaseAudio {
 	@Override
 	public void close() throws AudioException {
 		super.close();
-		if(this.mAudioCoder != null) {
-			this.mAudioCoder.close();
-			this.mAudioCoder = null;
-		}
-		if(this.mContainer != null) {
-			this.mContainer.close();
-			this.mContainer = null;
+		try(InputStream in = this.mInputStream) {
+			if(this.mAudioCoder != null) {
+				this.mAudioCoder.close();
+				this.mAudioCoder = null;
+			}
+			if(this.mContainer != null) {
+				this.mContainer.close();
+				this.mContainer = null;
+			}
+		} catch(IOException e) {
+			throw new AudioException("IOException while closing");
 		}
 	}
 
