@@ -86,6 +86,7 @@ public class XugglerAudio extends BaseAudio {
 	@SuppressWarnings("deprecation")
 	@Override
 	public void open() throws AudioException {
+		super.open();
 		this.mContainer = IContainer.make();
 
 		if(this.mContainer.open(this.mInputStream, null) < 0) {
