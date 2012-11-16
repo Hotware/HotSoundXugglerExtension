@@ -58,7 +58,7 @@ public class XugglerAudio extends BaseAudio {
 				while(true) {
 					int bytesDecoded = this.mAudioCoder.decodeAudio(samples,
 							packet,
-							0);
+							pStart);
 					if(bytesDecoded < 0) {
 						throw new AudioException("couldn't decode correctly");
 					}
